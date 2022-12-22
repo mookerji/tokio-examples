@@ -1,0 +1,8 @@
+.dockerignore
+.gitignore
+.git
+**/target/
+*~
+Dockerfile
+Makefile
+compose.yaml

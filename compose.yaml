@@ -1,0 +1,21 @@
+version: '3.9'
+services:
+  service:
+    build: .
+    depends_on:
+    - redis
+    environment:
+      REDIS_HOST: redis
+      GRPC_ADDR: "0.0.0.0:50051"
+      RUST_LOG: trace
+    ports:
+    - '50051:50051'
+    command: serviced
+    restart: always
+
+  redis:
+    image: redis:6.2-alpine
+    restart: always
+    ports:
+    - '6379:6379'
+    command: redis-server

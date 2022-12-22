@@ -1,0 +1,36 @@
+syntax = "proto3";
+
+package service;
+
+service KeyValue {
+  rpc ReadKeyValue (KeyValueReadRequest) returns (KeyValueReadResponse) {}
+  rpc WriteKeyValue (KeyValueWriteRequest) returns (KeyValueWriteResponse) {}
+}
+
+enum Status {
+  OK = 0;
+  ERROR_KEY_NOT_FOUND = 1;
+  ERROR_INTERNAL = 2;
+};
+
+message KeyValueItem {
+  string key = 1;
+  string value = 2;
+}
+
+message KeyValueReadRequest {
+  repeated string keys = 1;
+}
+
+message KeyValueReadResponse {
+  repeated KeyValueItem items = 1;
+  Status status = 2;
+}
+
+message KeyValueWriteRequest {
+  repeated KeyValueItem items = 1;
+}
+
+message KeyValueWriteResponse {
+  Status status = 1;
+}
