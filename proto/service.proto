@@ -2,6 +2,8 @@ syntax = "proto3";
 
 package service;
 
+// Key-Value Service
+
 service KeyValue {
   rpc ReadKeyValue (KeyValueReadRequest) returns (KeyValueReadResponse) {}
   rpc WriteKeyValue (KeyValueWriteRequest) returns (KeyValueWriteResponse) {}
@@ -15,7 +17,10 @@ enum Status {
 
 message KeyValueItem {
   string key = 1;
-  string value = 2;
+  oneof value {
+    string string_value = 2;
+    int32 int_value = 3;
+  }
 }
 
 message KeyValueReadRequest {
@@ -33,4 +38,17 @@ message KeyValueWriteRequest {
 
 message KeyValueWriteResponse {
   Status status = 1;
+}
+
+// Measurement service
+
+service Measurement {
+  rpc ReadMeasurement (MeasurementRequest) returns (MeasurementResponse) {}
+  rpc ReadMeasurements (MeasurementRequest) returns (stream MeasurementResponse) {}
+}
+
+message MeasurementRequest {}
+
+message MeasurementResponse {
+  float data = 1;
 }

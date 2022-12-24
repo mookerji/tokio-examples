@@ -1,21 +1,40 @@
 version: '3.9'
 services:
-  service:
+  key-value-service:
     build: .
     depends_on:
     - redis
+    - modbus-service
     environment:
       REDIS_HOST: redis
       GRPC_ADDR: "0.0.0.0:50051"
-      RUST_LOG: trace
+      RUST_LOG: hyper=trace
     ports:
     - '50051:50051'
     command: serviced
     restart: always
 
+  modbus-poll:
+    build: .
+    depends_on:
+    - key-value-service
+    - modbus-service
+    environment:
+      MODBUS_ADDR: "modbus-service:502"
+      GRPC_URI: "http://key-value-service:50051"
+    command: modbus-poll
+    restart: always
+
+  modbus-service:
+    build: ./tools/python
+    command: python3 /code/serve_modbus.py
+    ports:
+    - "502:502"
+    restart: always
+
   redis:
     image: redis:6.2-alpine
-    restart: always
+    command: redis-server
     ports:
     - '6379:6379'
-    command: redis-server
+    restart: always

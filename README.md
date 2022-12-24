@@ -32,3 +32,4 @@ See also:
 
 - https://blessed.rs/crates
 - https://tokio.rs/tokio/tutorial
+- https://rust-lang.github.io/async-book/
