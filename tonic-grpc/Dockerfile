@@ -1,7 +1,7 @@
 FROM rust:1.64-buster
 
 RUN apt update -q
-RUN apt install -y -qq python3-protobuf protobuf-compiler
+RUN apt install -y -qq python3-protobuf protobuf-compiler strace nmap dnsutils tcpdump
 
 RUN mkdir -p /cache/cargo-target /cache/cargo-home
 
