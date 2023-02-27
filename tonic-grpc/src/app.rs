@@ -6,11 +6,16 @@ use redis::Commands;
 use service as proto;
 use service::key_value_server::KeyValue;
 use service::measurement_server::Measurement;
+use std::collections::HashMap;
 use std::env;
+use std::str::from_utf8;
 use std::sync::{Arc, Mutex};
+use std::thread;
+use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
+use zmq;
 
 pub mod service {
     tonic::include_proto!("service");
@@ -134,4 +139,69 @@ impl Measurement for MeasurementApp {
         });
         Ok(Response::new(ReceiverStream::new(rx)))
     }
+}
+
+// NOTE(mookerji): What?
+//
+// tonic-grpc-modbus-service-1       | INFO:root:Starting pymodbus server
+// tonic-grpc-measurement-service-1  | 2023-02-27T06:57:46.539641Z  INFO ThreadId(06) serviced: src/main.rs:32: Starting server. addr=0.0.0.0:50052
+// tonic-grpc-measurement-service-1  | 2023-02-27T06:57:46.541277Z  INFO ThreadId(08) tokio_example::app: src/app.rs:147: Sleeper running and returning to sleep. Elapsed=2.911158ms
+// tonic-grpc-measurement-service-1  | 2023-02-27T06:57:46.539750Z  INFO ThreadId(07) tokio_example::app: src/app.rs:170: Started ZMQ backend
+// tonic-grpc-key-value-service-1    | 2023-02-27T06:57:46.555549Z  INFO ThreadId(08) tokio_example::app: src/app.rs:147: Sleeper running and returning to sleep. Elapsed=720.743µs
+pub fn run_sleeper() -> std::thread::JoinHandle<()> {
+    let start = std::time::Instant::now();
+    thread::spawn(move || loop {
+        tracing::info!(
+            "Sleeper running and returning to sleep. Elapsed={:?}",
+            start.elapsed()
+        );
+        std::thread::sleep(Duration::from_millis(10000));
+    })
+}
+
+pub fn run_zeromq() -> std::thread::JoinHandle<()> {
+    thread::spawn(|| {
+        let context = zmq::Context::new();
+        let frontend = context.socket(zmq::SUB).unwrap();
+        frontend
+            .connect("tcp://localhost:5557")
+            .expect("could not connect to frontend");
+        let backend = context.socket(zmq::XPUB).unwrap();
+        backend
+            .bind("tcp://*:5558")
+            .expect("could not bind backend socket");
+        //  Subscribe to every single topic from publisher
+        frontend.set_subscribe(b"").unwrap();
+        let mut msg = zmq::Message::new();
+        let mut cache = HashMap::new();
+        tracing::info!("Started ZMQ backend");
+        loop {
+            let mut items = [
+                frontend.as_poll_item(zmq::POLLIN),
+                backend.as_poll_item(zmq::POLLIN),
+            ];
+            if zmq::poll(&mut items, 10000).is_err() {
+                tracing::info!("ZMQ poll timeout");
+                break;
+            }
+            if items[0].is_readable() {
+                let topic = frontend.recv_msg(0).unwrap();
+                let current = frontend.recv_msg(0).unwrap();
+                cache.insert(topic.to_vec(), current.to_vec());
+                backend.send(topic, zmq::SNDMORE).unwrap();
+                backend.send(current, 0).unwrap();
+            }
+            if items[1].is_readable() {
+                let event = backend.recv_msg(0).unwrap();
+                if event[0] == 1 {
+                    let topic = &event[1..];
+                    tracing::info!("Sending cached topic {}", from_utf8(topic).unwrap());
+                    if let Some(previous) = cache.get(topic) {
+                        backend.send(topic, zmq::SNDMORE).unwrap();
+                        backend.send(previous, 0).unwrap();
+                    }
+                }
+            }
+        }
+    })
 }
