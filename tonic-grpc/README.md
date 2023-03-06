@@ -31,6 +31,31 @@ $  grpcurl -plaintext -d '{"keys": ["foo"]}' '127.0.0.1:50051' service.KeyValue/
 }
 ```
 
+## Usage
+
+### Without Docker
+
+Start dependent services:
+
+```bash
+// $ docker run --name some-redis redis
+$ brew services start redis
+$ docker run -p6831:6831/udp -p6832:6832/udp -p16686:16686 -p14268:14268 jaegertracing/all-in-one:latest
+```
+
+```bash
+$ RUST_BACKTRACE=1 cargo run --bin serviced
+```
+
+```bash
+$ grpcurl -plaintext -d '{"items": [{"key": "foo", "string_value": "bar"}]}' '127.0.0.1:50051' service.KeyValue/WriteKeyValue
+```
+
+```bash
+$ python3 tools/python/serve_modbus.py
+$ MODBUS_ADDR='0.0.0.0:502' RUST_BACKTRACE=1 cargo run --bin modbus-poll
+```
+
 ## Bugs
 
 ### Tonic creates IPv6 socket to communicate with IPv4 endpoint (?)
@@ -207,6 +232,26 @@ connect(3, {sa_family=AF_INET, sin_port=htons(50051), sin_addr=inet_addr("172.25
 +++ exited with 0 +++
 ```
 
+## OpenTelemetry not communicating with Jaeger
+
+```
+$ make
+```
+
+```
+$ grpcurl -plaintext -d '{"items": [{"key": "foo", "string_value": "bar"}]}' '127.0.0.1:50051' service.KeyValue/WriteKeyValue
+```
+
+```
+key-value-service_1    | OpenTelemetry trace error occurred. Exporter jaeger encountered the following error(s): thrift agent failed with not open
+key-value-service_1    | OpenTelemetry trace error occurred. Exporter jaeger encountered the following error(s): thrift agent failed with not open
+```
+
+Related issues:
+
+- https://github.com/open-telemetry/opentelemetry-rust/issues/851
+- https://github.com/open-telemetry/opentelemetry-rust/issues/759
+
 ## References
 
 See also:
@@ -214,3 +259,11 @@ See also:
 - https://blessed.rs/crates
 - https://tokio.rs/tokio/tutorial
 - https://rust-lang.github.io/async-book/
+
+Tracing:
+
+- https://tokio.rs/tokio/topics/tracing-next-steps
+- https://docs.rs/opentelemetry-jaeger/latest/opentelemetry_jaeger/
+- https://docs.rs/opentelemetry/latest/opentelemetry/trace/trait.Tracer.html
+- https://docs.rs/tracing/latest/tracing/span/index.html
+- https://docs.rs/tonic/latest/tonic/transport/struct.Server.html#method.trace_fn

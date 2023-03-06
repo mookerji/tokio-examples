@@ -5,10 +5,12 @@ services:
     depends_on:
     - redis
     - modbus-service
+    - jaeger
     environment:
       REDIS_HOST: redis
       GRPC_ADDR: "0.0.0.0:50051"
       RUST_LOG: hyper=trace
+      JAEGER_AGENT_ENDPOINT: "jaeger:6831"
     ports:
     - '50051:50051'
     command: serviced
@@ -34,6 +36,7 @@ services:
     environment:
       REDIS_HOST: redis
       GRPC_ADDR: "0.0.0.0:50052"
+      JAEGER_AGENT_ENDPOINT: "jaeger:6831"
     ports:
     - '50052:50052'
     command: serviced
@@ -51,4 +54,13 @@ services:
     command: redis-server
     ports:
     - '6379:6379'
+    restart: always
+
+  jaeger:
+    image: jaegertracing/all-in-one:latest
+    ports:
+    - '6831:6831/udp'
+    - '6832:6832/udp'
+    - '16686:16686'
+    - '14268:14268'
     restart: always
