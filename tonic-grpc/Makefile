@@ -6,6 +6,8 @@ PHONY: deps
 deps:
 	@brew install grpcurl
 	@cargo install --locked cargo-outdated tokio-console
+	@go install github.com/fullstorydev/grpcui/cmd/grpcui@latest
+	@go install github.com/grpc-ecosystem/grpc-health-probe@latest
 
 PHONY: format
 format:

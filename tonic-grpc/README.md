@@ -18,6 +18,8 @@ $ make deps
 
 ## Clients
 
+### grpc curl
+
 ```
 $  grpcurl -plaintext -d '{"items": [{"key": "foo", "string_value": "bar"}]}' '127.0.0.1:50051' service.KeyValue/WriteKeyValue
 $  grpcurl -plaintext -d '{"keys": ["foo"]}' '127.0.0.1:50051' service.KeyValue/ReadKeyValue
@@ -29,6 +31,24 @@ $  grpcurl -plaintext -d '{"keys": ["foo"]}' '127.0.0.1:50051' service.KeyValue/
     }
   ]
 }
+```
+
+### Health Checking
+
+```
+$ grpcurl -plaintext  '127.0.0.1:50051' grpc.health.v1.Health/Check
+{
+  "status": "SERVING"
+}
+
+$ ~/go/bin/grpc-health-probe  -addr='127.0.0.1:50051'
+status: SERVING
+
+$ ~/go/bin/grpc-health-probe -service=service.KeyValue  -addr='127.0.0.1:50051'
+status: SERVING
+
+$ ~/go/bin/grpc-health-probe -service=service.Measurement  -addr='127.0.0.1:50051'
+error: health rpc failed: rpc error: code = NotFound desc = service not registered
 ```
 
 ## Usage
@@ -262,8 +282,15 @@ See also:
 
 Tracing:
 
+- https://opentelemetry.io/docs/
+- https://www.jaegertracing.io/docs/1.18/architecture/
 - https://tokio.rs/tokio/topics/tracing-next-steps
 - https://docs.rs/opentelemetry-jaeger/latest/opentelemetry_jaeger/
 - https://docs.rs/opentelemetry/latest/opentelemetry/trace/trait.Tracer.html
 - https://docs.rs/tracing/latest/tracing/span/index.html
 - https://docs.rs/tonic/latest/tonic/transport/struct.Server.html#method.trace_fn
+
+Health checking:
+
+- https://github.com/grpc-ecosystem/grpc-health-probe
+- https://github.com/grpc/grpc/blob/master/doc/health-checking.md

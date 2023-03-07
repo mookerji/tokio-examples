@@ -34,16 +34,26 @@ impl GrpcContainer {
                 let addr = env::var("GRPC_ADDR")
                     .unwrap_or("0.0.0.0:50051".to_string())
                     .parse()?;
+
+                // Setup server reflection
                 let reflection_service = tonic_reflection::server::Builder::configure()
                     .register_encoded_file_descriptor_set(FILE_DESCRIPTOR_SET)
                     .build()?;
+
+                // Setup health service
+                let (kv_health_reporter, kv_health_service) =
+                    tonic_health::server::health_reporter();
+                let mut key_value_app = KeyValueApp::new(kv_health_reporter)?;
+                key_value_app.set_serving().await;
+
                 tracing::info!(message = "Starting server.", %addr);
                 Server::builder()
                     .trace_fn(|_| tracing::info_span!("keyvalue_server"))
                     .accept_http1(true)
                     .layer(GrpcWebLayer::new())
                     .add_service(reflection_service)
-                    .add_service(KeyValueServer::new(KeyValueApp::new()?))
+                    .add_service(kv_health_service)
+                    .add_service(KeyValueServer::new(key_value_app))
                     .add_service(MeasurementServer::new(MeasurementApp::default()))
                     .serve(addr)
                     .await?;

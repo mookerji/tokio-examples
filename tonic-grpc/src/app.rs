@@ -6,6 +6,7 @@ use rand::prelude::*;
 use redis::Commands;
 use service as proto;
 use service::key_value_server::KeyValue;
+use service::key_value_server::KeyValueServer;
 use service::measurement_server::Measurement;
 use std::collections::HashMap;
 use std::env;
@@ -16,6 +17,7 @@ use std::time::Duration;
 use tokio::sync::mpsc;
 use tokio_stream::wrappers::ReceiverStream;
 use tonic::{Request, Response, Status};
+use tonic_health::server::HealthReporter;
 use zmq;
 
 use opentelemetry::{
@@ -59,19 +61,32 @@ impl<'a> Extractor for MetadataMap<'a> {
 // Service definition
 
 pub struct KeyValueApp {
+    // Handles to redis backing service
     redis_client: Arc<Mutex<redis::Client>>,
     redis_conn: Arc<Mutex<redis::Connection>>,
+
+    // Handle for updating serving status
+    health_reporter: HealthReporter,
 }
 
 impl KeyValueApp {
-    pub fn new() -> Result<KeyValueApp> {
+    pub fn new(health_reporter: HealthReporter) -> Result<KeyValueApp> {
         let hostname = env::var("REDIS_HOST").unwrap_or("localhost".to_string());
         let client = redis::Client::open(format!("redis://{}/", hostname))?;
         let mut conn = client.get_connection()?;
         Ok(KeyValueApp {
             redis_client: Arc::new(Mutex::new(client)),
             redis_conn: Arc::new(Mutex::new(conn)),
+            health_reporter: health_reporter,
         })
+    }
+
+    // NOTE: Ideally this would be a separate task that periodically checked
+    // internal state.
+    pub async fn set_serving(&mut self) {
+        self.health_reporter
+            .set_serving::<KeyValueServer<KeyValueApp>>()
+            .await;
     }
 }
 
