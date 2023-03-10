@@ -8,14 +8,21 @@ use service as proto;
 use service::key_value_server::KeyValue;
 use service::key_value_server::KeyValueServer;
 use service::measurement_server::Measurement;
+use std::boxed::Box;
 use std::collections::HashMap;
 use std::env;
+use std::pin::Pin;
 use std::str::from_utf8;
+use std::sync::atomic::{AtomicI32, Ordering};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::Duration;
+use tokio::sync::broadcast;
 use tokio::sync::mpsc;
+use tokio_stream::wrappers::BroadcastStream;
 use tokio_stream::wrappers::ReceiverStream;
+use tokio_stream::Stream;
+use tokio_stream::StreamExt;
 use tonic::{Request, Response, Status};
 use tonic_health::server::HealthReporter;
 use zmq;
@@ -160,11 +167,32 @@ impl KeyValue for KeyValueApp {
     }
 }
 
-#[derive(Debug, Default)]
-pub struct MeasurementApp {}
-
-async fn random() -> f32 {
+fn random() -> f32 {
     rand::thread_rng().gen()
+}
+
+#[derive(Debug)]
+pub struct MeasurementApp {
+    tx_buf: broadcast::Sender<proto::MeasurementResponse>,
+}
+
+impl MeasurementApp {
+    pub async fn new() -> MeasurementApp {
+        let (tx, _) = broadcast::channel(16);
+        let tx2 = tx.clone();
+        let counter = AtomicI32::new(1);
+        thread::spawn(move || loop {
+            tracing::info!("Polling!");
+            tx2.send(proto::MeasurementResponse {
+                data: random(),
+                counter: counter.fetch_add(1, Ordering::SeqCst),
+            });
+            std::thread::sleep(Duration::from_millis(1000));
+        });
+        MeasurementApp {
+            tx_buf: tx,
+        }
+    }
 }
 
 #[tonic::async_trait]
@@ -177,26 +205,29 @@ impl Measurement for MeasurementApp {
         tracing::info!("received request / sent response");
         Ok(Response::new(proto::MeasurementResponse {
             data: rand::thread_rng().gen(),
+            counter: -1,
         }))
     }
 
-    type ReadMeasurementsStream = ReceiverStream<tonic::Result<proto::MeasurementResponse, Status>>;
+    type ReadMeasurementsStream = Pin<
+        Box<
+            dyn Stream<Item = tonic::Result<proto::MeasurementResponse, Status>>
+                + Send
+                + Sync
+                + 'static,
+        >,
+    >;
 
     async fn read_measurements(
         &self,
         request: tonic::Request<proto::MeasurementRequest>,
     ) -> tonic::Result<tonic::Response<Self::ReadMeasurementsStream>, tonic::Status> {
-        let (mut tx, rx) = mpsc::channel(4);
         tracing::info!("received request / sent response");
-        // TODO: figure out how this works
-        tokio::spawn(async move {
-            tx.send(Ok(proto::MeasurementResponse {
-                data: random().await,
-            }))
-            .await
-            .unwrap();
-        });
-        Ok(Response::new(ReceiverStream::new(rx)))
+        let stream = BroadcastStream::new(self.tx_buf.subscribe());
+        let output = stream.filter_map(|res| res.ok()).map(Ok);
+        Ok(Response::new(
+            std::boxed::Box::pin(output) as Self::ReadMeasurementsStream
+        ))
     }
 }
 
