@@ -51,4 +51,5 @@ message MeasurementRequest {}
 
 message MeasurementResponse {
   float data = 1;
+  int32 counter = 2;
 }

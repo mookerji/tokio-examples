@@ -54,7 +54,7 @@ impl GrpcContainer {
                     .add_service(reflection_service)
                     .add_service(kv_health_service)
                     .add_service(KeyValueServer::new(key_value_app))
-                    .add_service(MeasurementServer::new(MeasurementApp::default()))
+                    .add_service(MeasurementServer::new(MeasurementApp::new().await))
                     .serve(addr)
                     .await?;
                 tracing::info!(message = "Stopping.");
@@ -96,7 +96,15 @@ fn init_logging() -> Result<()> {
 }
 
 fn main() -> Result<()> {
-    init_logging()?;
+    let format = tracing_subscriber::fmt::format()
+        .with_file(true)
+        .with_line_number(true)
+        .with_level(true)
+        .with_target(true)
+        .with_thread_ids(true)
+        .with_thread_names(true)
+        .compact();
+    tracing_subscriber::fmt().event_format(format).init();
     let grpc = GrpcContainer::new()?;
     let threads = vec![run_zeromq(), run_sleeper()];
     for handle in threads {
