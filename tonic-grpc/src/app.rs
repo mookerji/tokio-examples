@@ -1,6 +1,5 @@
 use crate::types::*;
 
-use opentelemetry;
 use prost::Message;
 use rand::prelude::*;
 use redis::Commands;
@@ -27,11 +26,6 @@ use tonic::{Request, Response, Status};
 use tonic_health::server::HealthReporter;
 use zmq;
 
-use opentelemetry::{
-    propagation::Extractor,
-    trace::{Span, Tracer},
-};
-
 // PUll in definitions
 
 pub mod service {
@@ -39,31 +33,6 @@ pub mod service {
 }
 
 pub const FILE_DESCRIPTOR_SET: &[u8] = tonic::include_file_descriptor_set!("service_descriptor");
-
-// Utilities for metadata
-//
-// Copied from:
-// https://github.com/open-telemetry/opentelemetry-rust/blob/main/examples/grpc/src/server.rs
-
-struct MetadataMap<'a>(&'a tonic::metadata::MetadataMap);
-
-impl<'a> Extractor for MetadataMap<'a> {
-    /// Get a value for a key from the MetadataMap.  If the value can't be converted to &str, returns None
-    fn get(&self, key: &str) -> Option<&str> {
-        self.0.get(key).and_then(|metadata| metadata.to_str().ok())
-    }
-
-    /// Collect all the keys from the MetadataMap.
-    fn keys(&self) -> Vec<&str> {
-        self.0
-            .keys()
-            .map(|key| match key {
-                tonic::metadata::KeyRef::Ascii(v) => v.as_str(),
-                tonic::metadata::KeyRef::Binary(v) => v.as_str(),
-            })
-            .collect::<Vec<_>>()
-    }
-}
 
 // Service definition
 
@@ -111,15 +80,6 @@ impl KeyValue for KeyValueApp {
         request: Request<proto::KeyValueReadRequest>,
     ) -> tonic::Result<Response<proto::KeyValueReadResponse>, Status> {
         tracing::info!("received request");
-        let parent_cx = opentelemetry::global::get_text_map_propagator(|prop| {
-            prop.extract(&MetadataMap(request.metadata()))
-        });
-        let mut span = opentelemetry::global::tracer("key-value")
-            .start_with_context("Processing reply", &parent_cx);
-        span.set_attribute(opentelemetry::KeyValue::new(
-            "request",
-            format!("{request:?}"),
-        ));
         let conn = self.redis_conn.clone();
         let mut reply = proto::KeyValueReadResponse::default();
         let read_request = request.into_inner();

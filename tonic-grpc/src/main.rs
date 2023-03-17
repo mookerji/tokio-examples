@@ -72,29 +72,6 @@ impl GrpcContainer {
     }
 }
 
-fn init_logging() -> Result<()> {
-    global::set_text_map_propagator(opentelemetry_jaeger::Propagator::new());
-    let jaeger_endpoint = env::var("JAEGER_ENDPOINT").unwrap_or("localhost:6831".to_string());
-    let tracer = opentelemetry_jaeger::new_pipeline()
-        .with_service_name(bin_name().unwrap_or("UNKNOWN_SERVICE".to_string()))
-        .with_agent_endpoint(jaeger_endpoint)
-        .install_simple()?;
-    let opentelem = tracing_opentelemetry::layer().with_tracer(tracer);
-    let format = fmt::Layer::default()
-        .with_file(true)
-        .with_line_number(true)
-        .with_level(true)
-        .with_target(true)
-        .with_thread_ids(true)
-        .with_thread_names(true)
-        .compact();
-    tracing_subscriber::registry()
-        .with(opentelem)
-        .with(format)
-        .try_init()?;
-    Ok(())
-}
-
 fn main() -> Result<()> {
     let format = tracing_subscriber::fmt::format()
         .with_file(true)
@@ -106,7 +83,7 @@ fn main() -> Result<()> {
         .compact();
     tracing_subscriber::fmt().event_format(format).init();
     let grpc = GrpcContainer::new()?;
-    let threads = vec![run_zeromq(), run_sleeper()];
+    let threads = vec![run_sleeper()];
     for handle in threads {
         handle.join().unwrap();
     }
