@@ -1,5 +1,7 @@
 syntax = "proto3";
 
+import "google/protobuf/descriptor.proto";
+
 package service;
 
 // Key-Value Service
@@ -23,7 +25,18 @@ message KeyValueItem {
   }
 }
 
+message CustomMessageOptions {
+  string id = 1;
+}
+
+extend google.protobuf.MessageOptions {
+  optional CustomMessageOptions msg_opt = 60000;
+}
+
 message KeyValueReadRequest {
+  option (service.msg_opt) = {
+    id: "KEY_VALUE_READ_REQUEST"
+  };
   repeated string keys = 1;
 }
 
